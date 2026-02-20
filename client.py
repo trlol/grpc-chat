@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import time
+import argparse
 from datetime import datetime
 from pathlib import Path
 
@@ -33,29 +34,40 @@ DEFAULT_CONFIG = {
 }
 
 
-def load_config() -> dict:
-    if CONFIG_FILE.exists():
+def load_config(config_arg=None) -> dict:
+    """Загружает конфиг из файла, указанного в аргументе или по умолчанию"""
+    
+    # Если передан аргумент --config, используем его
+    if config_arg:
+        config_path = Path(config_arg)
+        if config_path.exists():
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    print(f"📄 Загружен конфиг: {config_path.name}", flush=True)
+                    return {**DEFAULT_CONFIG, **config}
+            except Exception as e:
+                print(f"⚠️ Ошибка чтения {config_path}: {e}", flush=True)
+        else:
+            print(f"⚠️ Файл {config_path} не найден!", flush=True)
+    
+    # По умолчанию используем config.json
+    config_path = CONFIG_FILE
+    
+    if config_path.exists():
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 return {**DEFAULT_CONFIG, **config}
         except json.JSONDecodeError as e:
             print(f"⚠️ Ошибка в config.json: {e}", flush=True)
-            print("📋 Используется конфигурация по умолчанию", flush=True)
     
+    # Создаём из примера если нет
     if CONFIG_EXAMPLE.exists():
         import shutil
         shutil.copy2(CONFIG_EXAMPLE, CONFIG_FILE)
         print(f"📝 Создан {CONFIG_FILE.name} из примера", flush=True)
-        print("✏️  Отредактируй server_ip и username перед запуском!", flush=True)
-        print("🔁 Перезапусти клиент после редактирования\n", flush=True)
-        sys.exit(0)
-    else:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
-        print(f"📝 Создан {CONFIG_FILE.name} с настройками по умолчанию", flush=True)
-        print("✏️  Отредактируй server_ip и username перед запуском!", flush=True)
-        print("🔁 Перезапусти клиент после редактирования\n", flush=True)
+        print("✏️  Отредактируй перед запуском!", flush=True)
         sys.exit(0)
     
     return DEFAULT_CONFIG
@@ -70,6 +82,8 @@ class ChatClient:
         self.stub = None
         self.outgoing_queue: queue.Queue = queue.Queue()
         self.running = True
+        self.input_lock = threading.Lock()
+        self.connected = threading.Event()  # Добавляем событие для синхронизации
 
     def connect(self, timeout: int = 10) -> bool:
         print(f"🔌 Подключение к {self.server_addr}...", flush=True)
@@ -79,8 +93,9 @@ class ChatClient:
                 self.channel = grpc.insecure_channel(
                     self.server_addr,
                     options=[
-                        ('grpc.keepalive_time_ms', 10000),
-                        ('grpc.keepalive_timeout_ms', 5000),
+                        ('grpc.keepalive_time_ms', 60000),
+                        ('grpc.keepalive_timeout_ms', 10000),
+                        ('grpc.keepalive_permit_without_calls', 1),
                         ('grpc.http2.max_pings_without_data', 0),
                     ]
                 )
@@ -99,6 +114,14 @@ class ChatClient:
         return False
 
     def generate_outgoing(self):
+        """Генератор исходящих сообщений"""
+        # Сразу отправляем пустое сообщение с ником для регистрации на сервере
+        yield pb2.ChatMessage(username=self.username, text="")
+        
+        # Сигнализируем что регистрация прошла
+        self.connected.set()
+        
+        # Отправляем остальные сообщения
         while self.running:
             try:
                 msg = self.outgoing_queue.get(timeout=0.5)
@@ -111,10 +134,23 @@ class ChatClient:
     def receive_loop(self, response_iterator):
         try:
             for response in response_iterator:
-                timestamp = datetime.fromtimestamp(response.timestamp / 1000).strftime('%H:%M:%S')
-                prefix = "🟢" if response.username == self.username else "👤"
-                print(f"\r{prefix} [{timestamp}] {response.username}: {response.text}", flush=True)
-                print("Вы: ", end='', flush=True)
+                # НЕ показываем свои сообщения - они уже показаны как "Вы:"
+                if response.username == self.username:
+                    continue
+                    
+                with self.input_lock:
+                    # Очищаем текущую строку "Вы: "
+                    print('\r' + ' ' * 80 + '\r', end='', flush=True)
+                    
+                    # Выводим полученное сообщение
+                    if response.username == "SERVER":
+                        print(f"🔔 {response.text}")
+                    else:
+                        print(f"👤 {response.username}: {response.text}")
+                    
+                    # Возвращаем приглашение для ввода
+                    print("Вы: ", end='', flush=True)
+                    
         except grpc.RpcError as e:
             print(f"\n❌ Соединение разорвано: {e.code()}", flush=True)
         finally:
@@ -122,6 +158,10 @@ class ChatClient:
 
     def input_loop(self):
         print("=== Чат запущен! Вводите сообщения (exit/quit для выхода) ===", flush=True)
+        
+        # Ждем подключения к серверу
+        self.connected.wait()
+        
         print("Вы: ", end='', flush=True)
         
         while self.running:
@@ -130,15 +170,23 @@ class ChatClient:
                 if not text:
                     print("Вы: ", end='', flush=True)
                     continue
+                
+                # Проверка на выход
                 if text.lower() in ['exit', 'quit', 'пока', '/quit']:
-                    self.outgoing_queue.put(
-                        pb2.ChatMessage(username=self.username, text=text, timestamp=int(time.time()*1000))
-                    )
+                    print("👋 Выход из чата...")
+                    self.outgoing_queue.put(None)
                     break
-                self.outgoing_queue.put(
-                    pb2.ChatMessage(username=self.username, text=text, timestamp=int(time.time()*1000))
-                )
+                
+                msg = pb2.ChatMessage(username=self.username, text=text)
+                
+                # Отправляем сообщение
+                self.outgoing_queue.put(msg)
+                
+                # Возвращаем приглашение для ввода
+                print("Вы: ", end='', flush=True)
+                
             except (EOFError, KeyboardInterrupt):
+                print("\n👋 Выход по прерыванию...")
                 break
         
         self.outgoing_queue.put(None)
@@ -156,12 +204,16 @@ class ChatClient:
         
         if self.channel:
             self.channel.close()
-        print("👋 Сеанс завершен", flush=True)
         return 0
 
 
 def main():
-    config = load_config()
+    parser = argparse.ArgumentParser(description='gRPC Chat Client')
+    parser.add_argument('--config', '-c', type=str, default=None,
+                        help='Путь к файлу конфигурации (по умолчанию: config.json)')
+    args = parser.parse_args()
+    
+    config = load_config(args.config)
     
     username = config['username'].strip()
     if not username:

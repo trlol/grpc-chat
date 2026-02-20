@@ -5,7 +5,6 @@ import queue
 import logging
 import time
 
-# Импорты из корня проекта (не из app!)
 import service_pb2 as pb2
 import service_pb2_grpc as pb2_grpc
 
@@ -29,19 +28,21 @@ class ChatService(pb2_grpc.ChatServiceServicer):
                         with self.lock:
                             self.clients[username] = outgoing_queue
                         logging.info(f"🟢 Подключился: {username}")
-                        self._broadcast("SERVER", f"{username} зашел в чат", skip=username)
-                    
-                    logging.info(f"📨 {username}: {request.text}")
-                    self._broadcast(username, request.text)
+                        # Отправляем всем КРОМЕ нового пользователя
+                        self._broadcast("SERVER", f"{username} зашел в чат", exclude=username)
+                    else:
+                        logging.info(f"📨 {username}: {request.text}")
+                        # Отправляем всем КРОМЕ отправителя
+                        self._broadcast(username, request.text, exclude=username)
                     
             except grpc.RpcError as e:
-                logging.warning(f"⚠️ Ошибка чтения у {username}: {e.code()}")
+                logging.warning(f"⚠️ Ошибка чтения у {username}: {e}")
             except Exception as e:
                 logging.error(f"❌ Критическая ошибка у {username}: {e}")
             finally:
                 if username:
                     logging.info(f"🔴 Отключился: {username}")
-                    self._broadcast("SERVER", f"{username} покинул чат", skip=username)
+                    self._broadcast("SERVER", f"{username} покинул чат", exclude=username)
                     with self.lock:
                         self.clients.pop(username, None)
 
@@ -55,21 +56,18 @@ class ChatService(pb2_grpc.ChatServiceServicer):
                     yield msg
                 except queue.Empty:
                     continue
-        except grpc.RpcError:
-            pass
+        except grpc.RpcError as e:
+            logging.warning(f"⚠️ Ошибка записи: {e}")
         finally:
             reader_thread.join(timeout=2.0)
 
-    def _broadcast(self, sender: str, text: str, skip: str = None):
-        msg = pb2.ChatMessage(
-            username=sender,
-            text=text,
-            timestamp=int(time.time() * 1000)
-        )
+    def _broadcast(self, sender: str, text: str, exclude: str = None):
+        """Отправляет сообщение всем клиентам, кроме exclude"""
+        msg = pb2.ChatMessage(username=sender, text=text)
         with self.lock:
             for user_name, q in list(self.clients.items()):
-                if user_name == skip:
-                    continue
+                if exclude and user_name == exclude:
+                    continue  # Пропускаем отправителя
                 try:
                     q.put(msg)
                 except Exception:
