@@ -1,0 +1,20 @@
+# Локальные настройки — не коммитить!
+config.json
+*.env
+
+# Сгенерированные файлы — можно не коммитить
+service_pb2.py
+service_pb2_grpc.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
