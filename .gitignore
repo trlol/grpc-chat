@@ -1,10 +1,7 @@
 # Локальные настройки — не коммитить!
 config.json
+config_sosun.json
 *.env
-
-# Сгенерированные файлы — можно не коммитить
-service_pb2.py
-service_pb2_grpc.py
 
 # Python
 __pycache__/
