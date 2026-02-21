@@ -1,6 +1,7 @@
 # Локальные настройки — не коммитить!
 config.json
 config2.json
+config3.json
 *.env
 
 # Python

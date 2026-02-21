@@ -6,10 +6,45 @@ import logging
 import time
 from datetime import datetime
 import random
+import requests
 
 import service_pb2 as pb2
 import service_pb2_grpc as pb2_grpc
 
+def translate_to_ru(text: str) -> str:
+    try:
+        response = requests.get(
+            "https://translate.googleapis.com/translate_a/single",
+            params={
+                "client": "gtx",
+                "sl": "en",
+                "tl": "ru",
+                "dt": "t",
+                "q": text,
+            },
+            timeout=5,
+        )
+        result = response.json()
+        translated = "".join([item[0] for item in result[0]])
+        return translated
+    except Exception:
+        return text
+
+def get_random_fact():
+    try:
+        fact_response = requests.get(
+            "https://uselessfacts.jsph.pl/random.json?language=en",
+            timeout=5
+        )
+        fact_response.raise_for_status()
+        fact = fact_response.json()["text"]
+
+        russian_fact = translate_to_ru(fact)
+
+        return f"📚 Факт: {russian_fact}"
+
+    except Exception:
+        return "⚠️ Не удалось получить факт"
 
 # === СПИСОК КОМАНД ===
 SERVER_COMMANDS = {
@@ -32,16 +67,7 @@ SERVER_COMMANDS = {
         "  !факт — случайный факт"
     ),
     '!цвет': lambda: f"🎨 Цвет: #{random.randint(0, 0xFFFFFF):06X}",
-    '!факт': lambda: random.choice([
-        "🧠 Мозг человека генерирует около 70 000 мыслей в день",
-        "🐙 У осьминога три сердца",
-        "🍯 Мёд никогда не портится (археологи находили съедобный мёд в гробницах)",
-        "🌡️ Самая высокая температура на Земле: +56.7°C (Долина Смерти, 1913)",
-        "🚀 Свет от Солнца до Земли идёт 8 минут 20 секунд",
-        "🐌 Улитка может спать 3 года",
-        "🍕 В мире ежедневно съедают около 350 кусков пиццы в секунду",
-        "📱 Первый телефонный звонок был сделан в 1876 году",
-    ]),
+    '!факт': get_random_fact,
 }
 
 

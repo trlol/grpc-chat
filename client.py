@@ -18,6 +18,10 @@ from pathlib import Path
 import service_pb2 as pb2
 import service_pb2_grpc as pb2_grpc
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.shortcuts import print_formatted_text
+
 
 # === СПИСОК СМАЙЛИКОВ ДЛЯ ВЫБОРА ===
 EMOJI_OPTIONS = [
@@ -117,6 +121,7 @@ class ChatClient:
         self.running = True
         self.input_lock = threading.Lock()
         self.connected = threading.Event()
+        self.session = PromptSession()
 
     def connect(self, timeout: int = 10) -> bool:
         print(f"🔌 Подключение к {self.server_addr}...", flush=True)
@@ -160,57 +165,49 @@ class ChatClient:
                 continue
 
     def receive_loop(self, response_iterator):
-        """Поток получения сообщений"""
         try:
             for response in response_iterator:
-                with self.input_lock:
-                    # Очищаем текущую строку
-                    print('\r' + ' ' * 80 + '\r', end='', flush=True)
-                    
-                    if response.username == "SERVER":
-                        # Сообщения от сервера (команды, системные)
-                        print(f"🔔 {response.text}")
-                    else:
-                        # Сообщения от пользователей
-                        user_emoji = response.emoji if response.emoji else "😀"
-                        print(f"{user_emoji} {response.username}: {response.text}")
-                    
-                    # Возвращаем приглашение для ввода
-                    print(f"{self.emoji} Вы: ", end='', flush=True)
-                    
+                if response.username == "SERVER":
+                    print_formatted_text(f"🔔 {response.text}")
+                else:
+                    user_emoji = response.emoji if response.emoji else "😀"
+                    print_formatted_text(f"{user_emoji} {response.username}: {response.text}")
+
         except grpc.RpcError as e:
-            print(f"\n❌ Соединение разорвано: {e.code()}", flush=True)
+            print_formatted_text(f"\n❌ Соединение разорвано: {e.code()}")
         finally:
             self.running = False
 
     def input_loop(self):
-        """Поток ввода с клавиатуры"""
-        print("=== Чат запущен! Вводите сообщения (exit/quit для выхода) ===", flush=True)
-        print("💡 Введите !помощь для списка команд", flush=True)
-        
+        print("=== Чат запущен! Вводите сообщения (exit/quit для выхода) ===")
+        print("💡 Введите !помощь для списка команд")
+
         self.connected.wait()
-        print(f"{self.emoji} Вы: ", end='', flush=True)
-        
-        while self.running:
-            try:
-                text = input()
-                if not text:
-                    print(f"{self.emoji} Вы: ", end='', flush=True)
-                    continue
-                
-                if text.lower() in ['exit', 'quit', 'пока', '/quit']:
-                    print("👋 Выход из чата...")
-                    self.outgoing_queue.put(None)
+
+        with patch_stdout():
+            while self.running:
+                try:
+                    text = self.session.prompt(f"{self.emoji} Вы: ")
+
+                    if not text:
+                        continue
+
+                    if text.lower() in ['exit', 'quit', 'пока', '/quit']:
+                        print("👋 Выход из чата...")
+                        self.outgoing_queue.put(None)
+                        break
+
+                    msg = pb2.ChatMessage(
+                        username=self.username,
+                        text=text,
+                        emoji=self.emoji
+                    )
+                    self.outgoing_queue.put(msg)
+
+                except (EOFError, KeyboardInterrupt):
+                    print("\n👋 Выход по прерыванию...")
                     break
-                
-                msg = pb2.ChatMessage(username=self.username, text=text, emoji=self.emoji)
-                self.outgoing_queue.put(msg)
-                print(f"{self.emoji} Вы: ", end='', flush=True)
-                
-            except (EOFError, KeyboardInterrupt):
-                print("\n👋 Выход по прерыванию...")
-                break
-        
+
         self.outgoing_queue.put(None)
         self.running = False
 
