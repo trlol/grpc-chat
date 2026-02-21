@@ -1,6 +1,6 @@
 # Локальные настройки — не коммитить!
 config.json
-config_sosun.json
+config2.json
 *.env
 
 # Python

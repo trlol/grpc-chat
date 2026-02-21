@@ -1,5 +1,5 @@
 {
-  "server_ip": "localhost",
+  "server_ip": "100.73.134.53",
   "server_port": 50051,
   "username": "",
   "auto_reconnect": true,
