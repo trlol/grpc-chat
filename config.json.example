@@ -2,6 +2,7 @@
   "server_ip": "100.73.134.53",
   "server_port": 50051,
   "username": "",
+  "emoji": "",
   "auto_reconnect": true,
   "reconnect_delay": 2
 }
