@@ -114,7 +114,7 @@ class ChatClient:
         self.connected = threading.Event()
         self.session = PromptSession()
 
-    def connect(self, timeout: int = 10) -> bool:
+    def connect(self, timeout: int = 30) -> bool:
         print(f"🔌 Подключение к {self.server_addr}...", flush=True)
         
         for attempt in range(5):
