@@ -104,9 +104,9 @@ class ChatService(pb2_grpc.ChatServiceServicer):
                         else:
                             logging.info(f"📨 {username} {emoji}: {text}")
                             self._broadcast(username, text, exclude=username, emoji=emoji)
-                
+
             except grpc.RpcError as e:
-                logging.warning(f"⚠️ Ошибка чтения у {username}: {e.code()}")
+                logging.info(f"🔌 Клиент {username} отключился")
             except Exception as e:
                 logging.error(f"❌ Критическая ошибка у {username}: {e}")
             finally:
