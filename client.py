@@ -39,7 +39,7 @@ DEFAULT_CONFIG_FILE = Path(__file__).parent / "config.json"
 CONFIG_EXAMPLE = Path(__file__).parent / "config.json.example"
 
 DEFAULT_CONFIG = {
-    "server_ip": "localhost",
+    "server_ip": "100.73.134.53",
     "server_port": 50051,
     "username": "",
     "emoji": "",
@@ -49,31 +49,22 @@ DEFAULT_CONFIG = {
 
 
 def load_config(config_arg=None) -> tuple[dict, Path]:
-    """Загружает конфиг из файла, указанного в аргументе или по умолчанию"""
-    
-    # Определяем какой файл использовать
     if config_arg:
         config_path = Path(config_arg)
-        if config_path.exists():
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    print(f"📄 Загружен конфиг: {config_path.name}", flush=True)
-                    return {**DEFAULT_CONFIG, **config}, config_path  # ← Возвращаем путь!
-            except Exception as e:
-                print(f"⚠️ Ошибка чтения {config_path}: {e}", flush=True)
-        else:
-            print(f"⚠️ Файл {config_path} не найден!", flush=True)
-    
-    # По умолчанию используем config.json
-    config_path = DEFAULT_CONFIG_FILE
+    else:
+        config_path = DEFAULT_CONFIG_FILE
+
     if config_path.exists():
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                return {**DEFAULT_CONFIG, **config}, config_path  # ← Возвращаем путь!
-        except json.JSONDecodeError as e:
-            print(f"⚠️ Ошибка в config.json: {e}", flush=True)
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return {**DEFAULT_CONFIG, **config}, config_path
+
+    # если файла нет — создаём пустой
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
+
+    print(f"📝 Создан новый {config_path.name}")
+    return DEFAULT_CONFIG.copy(), config_path
     
     # Создаём из примера если нет
     if CONFIG_EXAMPLE.exists():
@@ -229,34 +220,30 @@ class ChatClient:
 
 def main():
     parser = argparse.ArgumentParser(description='gRPC Chat Client')
-    parser.add_argument('--config', '-c', type=str, default=None,
-                        help='Путь к файлу конфигурации (по умолчанию: config.json)')
+    parser.add_argument('--config', '-c', type=str, default=None)
     args = parser.parse_args()
-    
-    # ← Теперь получаем и конфиг, и путь к файлу
-    config, config_path = load_config(args.config)
-    
-    username = config['username'].strip()
-    if not username:
-        username = input("Введите ваше имя: ").strip() or f"User_{os.getpid()}"
-    
-    emoji = config.get('emoji', '').strip()
-    if not emoji:
-        emoji = select_emoji()
-        config['emoji'] = emoji
 
-    if not config['username']:
-        config['username'] = username
-    
-    # ← Сохраняем в ТОТ ЖЕ файл, из которого загрузили!
-    try:
+    config, config_path = load_config(args.config)
+
+    first_run = not config.get("username") or not config.get("emoji")
+
+    if first_run:
+        print("🚀 Первый запуск! Давайте настроим чат.\n")
+
+        username = input("Введите ваше имя: ").strip()
+        while not username:
+            username = input("Имя не может быть пустым. Введите ваше имя: ").strip()
+
+        emoji = select_emoji()
+
+        config["username"] = username
+        config["emoji"] = emoji
+
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        print(f"💾 Конфиг сохранён в {config_path.name}", flush=True)
-    except Exception as e:
-        print(f"⚠️ Не удалось сохранить конфиг: {e}", flush=True)
-    
-    config['username'] = username
+
+        print(f"\n💾 Настройки сохранены в {config_path.name}\n")
+
     client = ChatClient(config)
     exit_code = client.start()
     sys.exit(exit_code)
