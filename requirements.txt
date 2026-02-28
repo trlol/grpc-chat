@@ -1,5 +1,5 @@
-grpcio>=1.63.2
-grpcio-tools>=1.63.2
+grpcio==1.78.1
+grpcio-tools==1.78.1
 protobuf>=5.0
 prompt_toolkit>=3.0.0
 requests
