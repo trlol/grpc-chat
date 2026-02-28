@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 import random
 import requests
+import os
 
 import service_pb2 as pb2
 import service_pb2_grpc as pb2_grpc
@@ -175,7 +176,8 @@ def serve():
         ]
     )
     pb2_grpc.add_ChatServiceServicer_to_server(ChatService(), server)
-    server.add_insecure_port('[::]:50051')
+    port = os.getenv("PORT", "50051")
+    server.add_insecure_port(f"0.0.0.0:{port}")
     server.start()
     logging.info("✅ Сервер чата запущен на [::]:50051")
     logging.info("🌐 Доступен из локальной сети и Tailscale")

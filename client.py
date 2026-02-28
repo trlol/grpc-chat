@@ -119,12 +119,9 @@ class ChatClient:
         
         for attempt in range(5):
             try:
-                self.channel = grpc.insecure_channel(
+                self.channel = grpc.secure_channel(
                     self.server_addr,
-                    options=[
-                        ('grpc.keepalive_time_ms', 60000),
-                        ('grpc.keepalive_timeout_ms', 10000),
-                    ]
+                    grpc.ssl_channel_credentials()
                 )
                 self.stub = pb2_grpc.ChatServiceStub(self.channel)
                 grpc.channel_ready_future(self.channel).result(timeout=timeout)
