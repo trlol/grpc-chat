@@ -36,11 +36,10 @@ EMOJI_OPTIONS = [
 
 # Пути к конфигу
 DEFAULT_CONFIG_FILE = Path(__file__).parent / "config.json"
-CONFIG_EXAMPLE = Path(__file__).parent / "config.json.example"
 
 DEFAULT_CONFIG = {
-    "server_ip": "100.73.134.53",
-    "server_port": 50051,
+    "server_ip": "yamabiko.proxy.rlwy.net",
+    "server_port": 34166,
     "username": "",
     "emoji": "",
     "auto_reconnect": True,
@@ -65,16 +64,6 @@ def load_config(config_arg=None) -> tuple[dict, Path]:
 
     print(f"📝 Создан новый {config_path.name}")
     return DEFAULT_CONFIG.copy(), config_path
-    
-    # Создаём из примера если нет
-    if CONFIG_EXAMPLE.exists():
-        import shutil
-        shutil.copy2(CONFIG_EXAMPLE, DEFAULT_CONFIG_FILE)
-        print(f"📝 Создан {DEFAULT_CONFIG_FILE.name} из примера", flush=True)
-        print("✏️  Отредактируй перед запуском!", flush=True)
-        sys.exit(0)
-    
-    return DEFAULT_CONFIG, DEFAULT_CONFIG_FILE
 
 
 def select_emoji() -> str:
@@ -119,7 +108,7 @@ class ChatClient:
         
         for attempt in range(5):
             try:
-                self.channel = grpc.insecure_channel("grpc-chat-production.up.railway.app:50051")
+                self.channel = grpc.insecure_channel("yamabiko.proxy.rlwy.net:34166")
                 self.stub = pb2_grpc.ChatServiceStub(self.channel)
                 grpc.channel_ready_future(self.channel).result(timeout=timeout)
                 print(f"✅ Подключено к {self.server_addr}", flush=True)
