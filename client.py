@@ -119,10 +119,7 @@ class ChatClient:
         
         for attempt in range(5):
             try:
-                self.channel = grpc.secure_channel(
-                    self.server_addr,
-                    grpc.ssl_channel_credentials()
-                )
+                self.channel = grpc.insecure_channel("grpc-chat-production.up.railway.app:50051")
                 self.stub = pb2_grpc.ChatServiceStub(self.channel)
                 grpc.channel_ready_future(self.channel).result(timeout=timeout)
                 print(f"✅ Подключено к {self.server_addr}", flush=True)

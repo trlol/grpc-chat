@@ -177,7 +177,7 @@ def serve():
     )
     pb2_grpc.add_ChatServiceServicer_to_server(ChatService(), server)
     port = os.getenv("PORT", "50051")
-    server.add_insecure_port(f"0.0.0.0:{port}")
+    server.add_insecure_port(f"[::]:{port}")
     server.start()
     logging.info("✅ Сервер чата запущен на [::]:50051")
     logging.info("🌐 Доступен из локальной сети и Tailscale")
